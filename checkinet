@@ -1,0 +1,42 @@
+#!/bin/sh
+
+# Copyright (c) 2012 Todd T. Fries <todd@fries.net>
+#
+# Permission to use, copy, modify, and distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+. /etc/he.conf
+
+gw4=$(netstat -nr -f inet | awk '{print $2;exit(0)}')
+extif=$(ifconfig egress | awk '/^gif/{next} /^[a-z]/{sub(":","",$1); print $1}')
+if ! ping -c 2 $gw4 > /dev/null 2>&1
+then
+	start=$SECONDS
+	while ! [ "$(ifconfig egress | grep active)" ]
+	do
+		sleep 5
+	done
+	active=$SECONDS
+	pkill dhclient
+	dhclient $extif > /dev/null 2>&1
+	dhclient=$SECONDS
+	
+	echo $start $active $dhclient | mail -s "restarted dhcp" servers@freedaemonconsulting.com
+fi
+
+gw6=$(netstat -nr -f inet6 | awk '{print $2;exit(0)}')
+if ! ping6 -c 2 2001:470:1f0e:702::1 > /dev/null 2>&1
+then
+	start=$SECONDS
+	/usr/local/sbin/updatehe
+	echo $start $SECONDS | mail -s "restarted v6" $email
+fi
