@@ -34,7 +34,7 @@ then
 fi
 
 gw6=$(netstat -nr -f inet6 | awk '{print $2;exit(0)}')
-if ! ping6 -c 2 2001:470:1f0e:702::1 > /dev/null 2>&1
+if ! ping6 -c 2 $gw6 > /dev/null 2>&1
 then
 	start=$SECONDS
 	/usr/local/sbin/updatehe
