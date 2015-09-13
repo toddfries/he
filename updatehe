@@ -14,19 +14,26 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+URL="https://ipv4.tunnelbroker.net/ipv4_end.php?ipv4b=%4%&pass=%P%&user_id=%U%&tunnel_id=%T%"
 . /etc/he.conf
-if ! ftp -o /var/log/ipv4update.log \
-	"https://ipv4.tunnelbroker.net/ipv4_end.php?ipv4b=AUTO&pass=$MD5PASS&user_id=$USERID&tunnel_id=$GTUNID"; then
+
+LOCIP=$(ifconfig egress | awk '$1 ~ /^inet$/{print $2}')
+URL=$(echo "$URL" | sed \
+	-e "s/%P%/${MD5PASS}/g" \
+	-e "s/%U%/${USERID}/g" \
+	-e "s/%4%/${LOCIP}/g" \
+	-e "s/%T%/${GTUNID}/g")
+
+if ! ftp -o /var/log/ipv4update.log "$URL"; then
 	echo "Failed to update he.net IPv6 tunnel"
 fi
 
-localip=$(ifconfig egress | awk '$1 ~ /^inet$/{print $2}')
 #
 #        tunnel: inet 1.2.3.4 -> 1.6.2.2
 
-rmtip=$(ifconfig egress | awk '/tunnel: inet /{print $5}')
-if [ "$localip" -a "$rmtip" ]; then
-	/sbin/ifconfig gif0 tunnel $localip $rmtip
+RMTIP=$(ifconfig egress | awk '/tunnel: inet /{print $5}')
+if [ "$LOCIP" -a "$RMTIP" ]; then
+	/sbin/ifconfig gif0 tunnel $LOCIP $RMTIP
 else
-	echo "gif0 localip=$localip rmtip=$rmtip"
+	echo "gif0 LOCIP=$LOCIP RMTIP=$RMTIP"
 fi
