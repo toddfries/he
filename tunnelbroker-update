@@ -1,0 +1,413 @@
+#!/usr/bin/perl -wT
+
+# +---------------------------------------------------------------------+
+# |                                                                     |
+# |  tunnelbroker-update script                                         |
+# |    version 0.10, 2008-03-20                                         |
+# |                                                                     |
+# +---------------------------------------------------------------------+
+# |                                                                     |
+# |  written by:                                                        |
+# |    Norman Rasmussen <norman@rasmussen.co.za>                        |
+# |    Vladimir Remetic <root@tuzlaorg.com>                             |
+# |    Mike Tindle <mtindle@he.net>                                     |
+# |    Mark Andrews <marka@isc.org>                                     |
+# |                                                                     |
+# +---------------------------------------------------------------------+
+# |                                                                     |
+# |  Change Log:                                                        |
+# |                                                                     |
+# |    0.10 : Norman Rasmussen, 2008-03-10                              |
+# |           Updated for new multi-tunnel web interface                |
+# |           Updated my email address                                  |
+# |                                                                     |
+# |    0.09 : Mark Andrews, 2003-06-21                                  |
+# |           Fixed problems with setting up IPv6 side of tunnel        |
+# |           and IPv6 default route.                                   |
+# |                                                                     |
+# |    0.08 : Mark Andrews, 2003-06-21                                  |
+# |           FreeBSD support                                           |
+# |           Prefix parsing updated                                    |
+# |                                                                     |
+# |    0.07b: Norman Rasmussen, 2002-07-19                              |
+# |           does that for /64 dns entries as well                     |
+# |                                                                     |
+# |    0.07 : Norman Rasmussen, 2002-05-26                              |
+# |           Retrys if it gets an 'endpoint is unstable' error         |
+# |                                                                     |
+# |    0.06b: Norman Rasmussen & Vladimir Remetic, 2002-04-01           |
+# |           added -T back.                                            |
+# |           -T problem fixed                                          |
+# |                                                                     |
+# |    0.06 : Vladimir Remetic, 2002-04-01                              |
+# |           automatic interface detection (ppp+/eth+).                |
+# |           automatic NAT firewall detection.                         |
+# |             note: often isp's hide your real ip from web-servers    |
+# |                   if they force you through their cache server.     |
+# |           small makeup changes, behindnat is sub now                |
+# |           removed -T.                                               |
+# |           added static ip support                                   |
+# |             note: if you set static ip it will override automatic   |
+# |                   ip detection so as NAT detection.                 |
+# |                   you should only set this option if you have       |
+# |                   static ip and all the IP detections fail.         |
+# |                                                                     |
+# |    0.05b: Norman Rasmussen, 2002-03-31                              |
+# |           ugh, expect me not to figure that getting ip's            |
+# |           must not go via proxy server.                             |
+# |                                                                     |
+# |    0.05 : Norman Rasmussen, 2002-03-30                              |
+# |           cleared up some of the patches, fixed up white space.     |
+# |           i'm using 8 length tabs as well now, was using 4.         |
+# |           included Mike Tindle's code for tunnel setup once         |
+# |             the end point had been updated.                         |
+# |           we now check for bad username/password when we login      |
+# |           updated my email address, iname are going to stop         |
+# |             forwding for free.                                      |
+# |                                                                     |
+# |    0.04 : Vladimir Remetic, 2002-03-29                              |
+# |           if you are behind NAT your IP could be detected           |
+# |           through http://www.whatismyip.com                         |
+# |             note: often isp's hide your real ip from web-servers    |
+# |                   if they force you through their cache server.     |
+# |                                                                     |
+# |    0.03b: Mike Tindle, 2002-03-27                                   |
+# |           It sets up the config locally for the tunnel              |
+# |             as well as updating the tunnel broker                   |
+# |                                                                     |
+# |    0.03 : Norman Rasmussen, 2002-03-20                              |
+# |           now updates dns settings when you active the /64.         |
+# |                                                                     |
+# |    0.02 : Norman Rasmussen, 2002-02-19                              |
+# |           script can now active a tunnel that was down.             |
+# |                                                                     |
+# |    0.01 : Norman Rasmussen                                          |
+# |           script updates old tunnel with current ipv4 address.      |
+# |                                                                     |
+# +---------------------------------------------------------------------+
+
+#####################################################################
+# user configurable section                                         #
+#####################################################################
+
+my %config = (
+	# local interface Config
+
+	'autodev'		=> 1,		# automatic interface/ip detection (if you are dialup user only)
+	'extdev' 		=> 'eth',	# the one with your dynamic ip (if autodev answered 1 only put ppp or eth)
+						# if you leave at eth, first found eth that is up will be detected
+	'tnldev0' 		=> 'sit0',	# (leave blank if answered 1 in autodev)
+	'tnldev1' 		=> 'sit1',	# (leave blank if answered 1 in autodev)
+	'behindnat'		=> 0,		# use external site to get ip, use if behind NAT firewall
+	'autonat'		=> 1,		# don't change this (leave at 1). this is used to determine your ip if autodetection fails
+						# change only if your ISP forces you to use nat and they route IPv6 traffic to you
+	'staticip'		=> '',		# leave blank if you dont have a static ip.
+						# this option will override auto-detected ip's
+	# tunnelbroker config
+
+	'username'		=> 'dd',	# tunnelbroker username
+	'clearpassword'		=> 'dd',	# can use, but rather use password
+	'password'		=> '',		# make this with: echo -n <password> | openssl md5
+	'tunnelid'		=> 1234,	# the tunnel id to configure, get this from the tunnel details page url
+	'updatens'		=> 0,		# do you want to update your name severs
+	'ns1'			=> '',		# name severs for the allocated prefixes
+	'ns2'			=> '',
+	'ns3'			=> '',
+
+	# misc config
+
+	'verbose'		=> 1,		# lots of messages
+	'trycount'		=> 3,		# how many times it will try and set the endpoint if the server complains it's unstable
+	'proxy'			=> '',		# use if nessary 'cache.server:3128', behindnat never uses this proxy
+	'config_int'		=> 0,		# use to configure the interfaces
+	'loadmod'		=> 0,		# use to force load the ipv6 module
+
+	# these get filled in by the script, from what the server tells us
+
+	'os'			=> '',		# Linux, FreeBSD
+	'remote'		=> '',		# remote ipv4 of the broker
+	'local'			=> '',		# local ipv4 - where the broker thinks we are
+	'remote-ipv6'		=> '',		# remote ipv6 of the broker's tunnel
+	'local-ipv6'		=> '',		# local ipv6 of the broker's tunnel
+	'routed-48' 		=> '',		# your assigned /48 prefix
+	'routed-64' 		=> '',		# your assigned /48 prefix
+	'rdns1' 		=> '',		# reverse name server #1
+	'rdns2' 		=> '',		# reverse name server #2
+	'rdns3' 		=> '',		# reverse name server #3
+
+	''=>'');
+
+#####################################################################
+# not so user configurable section                                  #
+#####################################################################
+
+$progname	= "tunnelbroker-update";
+$version	= "0.10";
+$date		= "2008-03-10";
+
+$whatismyip	= "http://www.whatismyip.com/";
+$server		= "http://tunnelbroker.net/";
+$indexpage	= "index.php";
+$setipv4	= "ipv4_end.php?tunnelid=$config{'tunnelid'}";
+$nsupdate	= "nsupdate.php?tunnelid=$config{'tunnelid'}";
+$getdetails	= "tunnel_detail.php?tunnelid=$config{'tunnelid'}";
+$logoutpage	= "logout.php";
+
+# because we have taint on, we have to give path to programs we want to run
+$ENV{PATH}	= "/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin";
+
+use LWP::UserAgent;
+use HTTP::Cookies;
+
+$| = 1;		# output-autoflush, can't hurt :-)
+$config{'os'} = `uname`;
+chomp $config{'os'};
+if ($config{'verbose'}) {
+	print "$progname version $version ($date)\n";
+	print "Running under: ".$config{'os'}."\n";
+}
+
+if (!$config{'password'}) {
+	if ($config{'verbose'}) { print "No md5 password found, " }
+	if ($config{'clearpassword'}) {
+		if ($config{'verbose'}) { print "clear password found, you should really convert it to md5!\n" }
+		$config{'password'} = `echo -n $config{'clearpassword'} | openssl md5`;
+		chomp $config{'password'}
+	} else {
+		die "$progname: no password configured, login would fail!\n";
+	}
+}
+
+$ua = new LWP::UserAgent;
+$ua->agent("$progname/$version");
+$cookie_jar = new HTTP::Cookies;
+$headers = new HTTP::Headers Pragma => "no-cache";
+
+sub natbox {
+	if ($config{'verbose'}) { print "Using $whatismyip to determine localip!\n"; }
+	$req = new HTTP::Request GET => $whatismyip, $headers;
+	$res = $ua->simple_request($req);
+	if ($res->is_error) { die "\n$progname: Error during get ip: ".$res->status_line."\n" }
+	if ($res->content =~ /Your ip is ([\d.]*)/s) { $localip = $1 }
+}
+
+if ($config{'verbose'}) { print "Getting local ip \n" }
+if ($config{'behindnat'}) {
+	natbox();
+} else {
+	if ($config{'autodev'} && $config{'os'} ne "Linux") {
+		 die "$progname: autodev is only supported for Linux.\n";
+	}
+	if($config{'autodev'} && $config{'os'} eq "Linux") {
+		if ($config{'verbose'}) { print " Searching for a device.... \n" }
+		if (`ifconfig -s | grep $config{'extdev'}` =~ m/$config{'extdev'}(\d)/s) {
+			$1 =~ m/(\d+)/;
+			$config{'extdev'} .= $1;
+			if ($config{'verbose'}) { print " Found the first working device : $config{'extdev'}!\n" ; }
+			if (`ifconfig $config{'extdev'}` =~ m/inet addr:(\d+\.\d+\.\d+\.\d+)/s) { $localip = $1 } 
+		} else {
+			print " Interface could not be detected.\n";
+			die "$progname: Make sure your $config{'extdev'} link is up.\n";
+		}
+	} else {
+		if ($config{'verbose'}) { print "using interface : $config{'extdev'}\n"; }
+		if ($config{'os'} eq "Linux") {
+			if (`ifconfig $config{'extdev'}` =~ m/inet addr:(\d+\.\d+\.\d+\.\d+)/s) { $localip = $1 } 
+		} else {
+			if (`ifconfig $config{'extdev'}` =~ m/inet (\d+\.\d+\.\d+\.\d+)/s) { $localip = $1 } 
+		}
+	}
+}
+
+if ($config{'autonat'}) {
+	if ($config{'verbose'}) { print " Checking to make sure $localip is not LAN IP... \n"; }
+	if (($localip =~ m/10.(\d+\.\d+\.\d+)/s) || ($localip =~ m/192.168.(\d+\.\d+)/s) || ($localip =~ m/172\.(\d+)\.\d+\.\d+/s and $1>=16 and $1<=33))  { 
+	if ($config{'verbose'}) { print " - $localip is really a LAN IP. You should enable behindnat option in config section. Trying to get your real IP!\n"; }
+		natbox();
+	}
+}
+
+if ($config{'staticip'} =~ m/(\d+\.\d+\.\d+\.\d+)/s) {
+	if ($config{'verbose'}) { print " Pre-defined static IP detected. \n"; print " New localip : $config{'staticip'} \n"; }
+	$localip = $config{'staticip'};
+}
+	
+if ($config{'os'} eq "Linux") {
+	if (`ifconfig $config{'tnldev0'}` =~ m/inet6 addr: ::(\d+\.\d+\.\d+\.\d+)/s) { $localipv4 = $1 }
+	if (`ifconfig $config{'tnldev1'}` =~ m/inet6 addr: (\S+)\/127/s) { $localipv6 = $1 }
+} else {
+	if (`ifconfig $config{'tnldev0'}` =~ m/inet (\d+\.\d+\.\d+\.\d+) -->/s) { $localipv4 = $1 }
+	if (`ifconfig $config{'tnldev0'}` =~ m/inet6 (\S+) -->/s) { $localipv6 = $1 }
+}
+
+if ($config{'verbose'}) { print "Local Settings:\n" }
+if ($config{'verbose'}) { print " Local   $config{'extdev'} : $localip\n" }
+if ($config{'verbose'}) { print " Local   $config{'tnldev0'} : ". ($localipv4 ? $localipv4 : DOWN) ."\n" }
+if ($config{'verbose'}) { print " Local   $config{'tnldev1'} : ". ($localipv6 ? $localipv6 : DOWN) ."\n" }
+
+#enable a proxy server if we have one
+if ($config{'proxy'}) { $ua->proxy("http", "http://".$config{'proxy'}."/") }
+
+if ($config{'verbose'}) { print "creating new session... " }
+$req = new HTTP::Request GET => $server.$indexpage, $headers;
+$res = $ua->simple_request($req);
+if ($res->is_error) { die "\n$progname: Error during get session id: ".$res->status_line."\n" }
+$cookie_jar->extract_cookies($res);
+if ($config{'verbose'}) { print "done\n" };
+($sess = $cookie_jar->as_string()) =~ s/.*(Example_Session=\S*);.*/$1/;
+
+if ($config{'verbose'}) { print "initialising session... " }
+$req = new HTTP::Request GET => $server.$indexpage."?".$sess, $headers;
+$cookie_jar->add_cookie_header($req);
+$res = $ua->simple_request($req);
+if ($res->is_error) { die "\n$progname: Error during link id to login: ".$res->status_line."\n" }
+if ($config{'verbose'}) { print "done\n" };
+
+if ($config{'verbose'}) { print "login and get current settings... " }
+$req = new HTTP::Request POST => $server.$getdetails, $headers;
+$req->content_type('application/x-www-form-urlencoded');
+$req->content("username=".$config{'username'}."&password=".$config{'password'});
+$cookie_jar->add_cookie_header($req);
+$res = $ua->simple_request($req);
+if ($res->is_error) { die "\n$progname: Error during login: ".$res->status_line."\n" }
+if ($res->content =~ /failed login code/s) { die "\n$progname: Error during login: bad username and/or password\n" }
+if ($config{'verbose'}) { print "done\n" };
+
+updateconfig($res->content);
+
+my $changed = 0;
+if ($config{'local'} ne $localip) {
+
+	my $trycount = $config{'trycount'};
+	while ($trycount > 0) {
+		if ($config{'remote'} eq "") {
+			if ($config{'verbose'}) { print "activate ipv4 end... " }
+			$req = new HTTP::Request POST => $server.$indexpage, $headers;
+			$req->content("ipv4b=".$localip."&activate=Submit");
+		} else {
+			if ($config{'verbose'}) { print "update ipv4 end... " }
+			$req = new HTTP::Request POST => $server.$setipv4, $headers;
+			$req->content("ipv4b=".$localip."&update=Submit");
+		}
+		$req->content_type('application/x-www-form-urlencoded');
+		$cookie_jar->add_cookie_header($req);
+		$res = $ua->simple_request($req);
+		if ($res->is_error) { die "\n$progname: Error during set ipv4 end: ".$res->status_line."\n" }
+
+		if ($res->content =~ /font color.*?>(.*?)</s) {$msg = $1;}
+
+		$changed = 1;
+		if ($config{'verbose'}) { print "done: $msg\n" };
+
+		if ($msg eq "Error: Your IPv4 endpoint is unreachable or unstable") {
+			$trycount--;
+			if ($trycount == 0) { die "$msg\n" }
+		} else {
+			$trycount = 0;
+		}
+	}
+} else {
+	if ($config{'verbose'}) { print "local ipv4 didn't change, skipped\n" }
+}
+
+if ((	lc $config{'rdns1'} ne lc $config{'ns1'} || 
+	lc $config{'rdns2'} ne lc $config{'ns2'} || 
+	lc $config{'rdns3'} ne lc $config{'ns3'}) && 
+	$config{'updatens'}) {
+
+	my $trycount = $config{'trycount'};
+	while ($trycount > 0) {
+		if ($config{'verbose'}) { print "updating name servers... " }
+		$req = new HTTP::Request POST => $server.$nsupdate, $headers;
+		$req->content("ns1=".$config{'ns1'}."&ns2=".$config{'ns2'}."&ns3=".$config{'ns3'}."&request=Submit");
+		$req->content_type('application/x-www-form-urlencoded');
+		$cookie_jar->add_cookie_header($req);
+		$res = $ua->simple_request($req);
+		if ($res->is_error) { die "\n$progname: Error during update name servers: ".$res->status_line."\n" }
+		if ($res->content =~ /font color.*?>(.*?)(?:Please click )?</s) {$msg = $1;}
+		$changed = 1;
+		if ($config{'verbose'}) { print "done: $msg\n" };
+
+		if (($msg eq "Error: The name server, ".$config{'ns1'}.", is unreachable or unstable") || 
+		    ($msg eq "Error: The name server, ".$config{'ns2'}.", is unreachable or unstable") ||
+		    ($msg eq "Error: The name server, ".$config{'ns3'}.", is unreachable or unstable")) {
+			$trycount--;
+			if ($trycount == 0) { die "$msg\n" }
+		} else {
+			$trycount = 0;
+		}
+	}	
+} else {
+	if ($config{'verbose'}) { print "name servers already configured or auto-configuration disabled, skipped\n" }
+}
+
+if ($changed) {
+	if ($config{'verbose'}) { print "config changed, get tunnel details... " }
+	$req = new HTTP::Request GET => $server.$getdetails, $headers;
+	$cookie_jar->add_cookie_header($req);
+	$res = $ua->simple_request($req);
+	if ($res->is_error) { die "\n$progname: Error during get tunnel details: ".$res->status_line."\n" }
+	if ($config{'verbose'}) { print "done\n" };
+
+	updateconfig($res->content);
+} else {
+	if ($config{'verbose'}) { print "config same, skipping get tunnel details\n" }
+}
+
+if ($config{'verbose'}) { print "logout... " }
+$req = new HTTP::Request POST => $server.$logoutpage, $headers;
+$cookie_jar->add_cookie_header($req);
+$res = $ua->simple_request($req);
+if ($res->is_error) { die "\n$progname: Error during logout: ".$res->status_line."\n" }
+if ($config{'verbose'}) { print "done\n" };
+
+if ($config{'config_int'} && ( (uc $localipv6 ne uc $config{'local-ipv6'}) || ($localipv4 ne $config{'local'}) ) ) {
+	if ($config{'verbose'}) { print "configuring local interface $config{'extdev'}... " }
+	if ($config{'os'} eq "Linux") {
+		if ($config{'loadmod'}) { if (`modprobe ipv6`) { die "IPv6 kernel module not loaded correctly"; } }
+		`ifconfig $config{'tnldev0'} down`;
+		`ifconfig $config{'tnldev0'} up`;
+		`ifconfig $config{'tnldev0'} inet6 tunnel ::$config{'remote'}`;
+		`ifconfig $config{'tnldev1'} down`;
+		`ifconfig $config{'tnldev1'} up`;
+		`ifconfig $config{'tnldev1'} inet6 add $config{'local-ipv6'}/127`;
+		`route -A inet6 add ::/0 dev $config{'tnldev1'}`;
+	} else {
+		`ifconfig $config{'tnldev0'} create`;
+		`ifconfig $config{'tnldev0'} down`;
+		`ifconfig $config{'tnldev0'} inet tunnel $config{'local'} $config{'remote'}`;
+		`ifconfig $config{'tnldev0'} up`;
+		`ifconfig $config{'tnldev0'} inet6 $config{'local-ipv6'} $config{'remote-ipv6'} prefixlen 128`;
+		`route add -inet6 default $config{'remote-ipv6'}`;
+	}
+
+	if ($config{'verbose'}) { print "done\n" };
+} else {
+	if ($config{'verbose'}) { print "local interface $config{'extdev'} already configured or auto-configuration disabled, skipped\n" }
+}
+
+sub updateconfig {
+	local($page) = @_;
+	if ($page =~ /Client IPv4(?>.*?\/a>)\s*([\d.]*)/s) 		{$config{'local'} = $1}		elsif ($config{'verbose'}) {print "Couldn't find Local   IPv4\n"}
+	if ($page =~ /Server IPv4(?>.*?right>)\s*([\d.]*)/s) 		{$config{'remote'} = $1}	elsif ($config{'verbose'}) {print "Couldn't find Remote  IPv4\n"}
+	if ($page =~ /Server IPv6(?>.*?right>)\s*([\dA-Fa-f:]*)/s) 	{$config{'remote-ipv6'} = $1}	elsif ($config{'verbose'}) {print "Couldn't find Remote  IPv6\n"}
+	if ($page =~ /Client IPv6(?>.*?right>)\s*([\dA-Fa-f:]*)/s) 	{$config{'local-ipv6'} = $1}	elsif ($config{'verbose'}) {print "Couldn't find Local   IPv6\n"}
+	if ($page =~ /Routed \/48(?>.*?right>)\s*([\dA-Fa-f:]*\/\d*)/s)	{$config{'routed-48'} = $1}	elsif ($config{'verbose'}) {print "Couldn't find Routed  /48\n"}
+	if ($page =~ /Routed \/64(?>.*?right>)\s*([\dA-Fa-f:]*\/\d*)/s)	{$config{'routed-64'} = $1}	elsif ($config{'verbose'}) {print "Couldn't find Routed  /64\n"}
+	if ($page =~ /RDNS Delegation NS1(?>.*?\/a>)\s*([^\s<]+)/s)	{$config{'rdns1'} = $1}		elsif ($config{'verbose'}) {print "Couldn't find RDNS NS 1\n"}
+	if ($page =~ /RDNS Delegation NS2(?>.*?\/a>)\s*([^\s<]+)/s)	{$config{'rdns2'} = $1}		elsif ($config{'verbose'}) {print "Couldn't find RDNS NS 2\n"}
+	if ($page =~ /RDNS Delegation NS3(?>.*?\/a>)\s*([^\s<]+)/s)	{$config{'rdns3'} = $1}		elsif ($config{'verbose'}) {print "Couldn't find RDNS NS 3\n"}
+
+	if ($config{'verbose'}) { 
+		print "Current Server Settings:\n";
+		print " Local   IPv4 : $config{'local'}\n";
+		print " Remote  IPv4 : $config{'remote'}\n";
+		print " Remote  IPv6 : $config{'remote-ipv6'}\n";
+		print " Local   IPv6 : $config{'local-ipv6'}\n";
+		print " Routed  /48  : $config{'routed-48'}\n";
+		print " Routed  /64  : $config{'routed-64'}\n";
+		print " RDNS NS 1    : $config{'rdns1'}\n";
+		print " RDNS NS 2    : $config{'rdns2'}\n";
+		print " RDNS NS 3    : $config{'rdns3'}\n";
+	};
+}
