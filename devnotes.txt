@@ -1,0 +1,15 @@
+-ERROR: Missing parameter(s).
+Usage: http://ipv4.tunnelbroker.net/ipv4_end.php?ip=IPV4ADDR&pass=PASSKEY&user_id=USERID&tid=TUNNELID
+ -or-: https://USERNAME:PASSWORD@ipv4.tunnelbroker.net/ipv4_end.php?tid=TUNNELID (auto-detect IP)
+       https://USERNAME:PASSWORD@ipv4.tunnelbroker.net/ipv4_end.php?tid=TUNNELID&ip=IPV4ADDR
+
+IPV4ADDR: Your IPv4 endpoint.  Set to AUTO to determine your IP based on the IP you requested this page from.  Previously passed as ipv4b.
+PASSKEY : Your tunnel update key, or MD5 hash of your tunnelbroker.net password if a tunnel specific key is not set.  You may be able to 'echo -n YOURPASSWORD | md5sum' to produce the MD5 hash of your password.
+USERID  : The UserID shown on the main page of tunnelbroker.net when you log in.
+TUNNELID: The ID of the tunnel you're updating the endpoint on.  This can be found on the tunnel information page.  Previously referred to as the Global Tunnel ID / tunnel_id.
+
+The following parameters are only usable when accessing this script over https.
+USERNAME: Your tunnelbroker.net username.
+PASSWORD: Your tunnel update key, or tunnelbroker.net password if a tunnel specific key is not set.
+
+The legacy parameter names will continue to work for the forseable future.  Naming of them changed to be more in line with industry convention and their roles.
