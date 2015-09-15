@@ -93,10 +93,10 @@
 my %config = (
 	# local interface Config
 
-	'autodev'		=> 1,		# automatic interface/ip detection (if you are dialup user only)
-	'extdev' 		=> 'eth',	# the one with your dynamic ip (if autodev answered 1 only put ppp or eth)
+	'autodev'		=> 0,		# automatic interface/ip detection (if you are dialup user only)
+	'extdev' 		=> 'vio',	# the one with your dynamic ip (if autodev answered 1 only put ppp or eth)
 						# if you leave at eth, first found eth that is up will be detected
-	'tnldev0' 		=> 'sit0',	# (leave blank if answered 1 in autodev)
+	'tnldev0' 		=> 'gif0',	# (leave blank if answered 1 in autodev)
 	'tnldev1' 		=> 'sit1',	# (leave blank if answered 1 in autodev)
 	'behindnat'		=> 0,		# use external site to get ip, use if behind NAT firewall
 	'autonat'		=> 1,		# don't change this (leave at 1). this is used to determine your ip if autodetection fails
@@ -105,9 +105,9 @@ my %config = (
 						# this option will override auto-detected ip's
 	# tunnelbroker config
 
-	'username'		=> 'dd',	# tunnelbroker username
+	'username'		=> 'fdctunnelone',	# tunnelbroker username
 	'clearpassword'		=> 'dd',	# can use, but rather use password
-	'password'		=> '',		# make this with: echo -n <password> | openssl md5
+
 	'tunnelid'		=> 1234,	# the tunnel id to configure, get this from the tunnel details page url
 	'updatens'		=> 0,		# do you want to update your name severs
 	'ns1'			=> '',		# name severs for the allocated prefixes
@@ -195,12 +195,12 @@ if ($config{'verbose'}) { print "Getting local ip \n" }
 if ($config{'behindnat'}) {
 	natbox();
 } else {
-	if ($config{'autodev'} && $config{'os'} ne "Linux") {
-		 die "$progname: autodev is only supported for Linux.\n";
+	if ($config{'autodev'} && $config{'os'} ne "OpenBSD") {
+		 die "$progname: autodev is only supported for OpenBSD.\n";
 	}
 	if($config{'autodev'} && $config{'os'} eq "Linux") {
 		if ($config{'verbose'}) { print " Searching for a device.... \n" }
-		if (`ifconfig -s | grep $config{'extdev'}` =~ m/$config{'extdev'}(\d)/s) {
+		if (`ifconfig | grep $config{'extdev'}` =~ m/$config{'extdev'}(\d)/s) {
 			$1 =~ m/(\d+)/;
 			$config{'extdev'} .= $1;
 			if ($config{'verbose'}) { print " Found the first working device : $config{'extdev'}!\n" ; }
