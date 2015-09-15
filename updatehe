@@ -14,25 +14,16 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-URL="https://ipv4.tunnelbroker.net/ipv4_end.php?ipv4b=%4%&pass=%P%&user_id=%U%&tunnel_id=%T%"
-URL="https://ipv4.tunnelbroker.net/ipv4_end.php?ipv4b=%4%&pass=%P%&user_id=%U%&tunnelid=%T%"
-URL="https://ipv4.tunnelbroker.net/ipv4_end.php?ipv4b=%4%&password=%P%&username=%U%&tunnel_id=%T%"
-URL="https://%U%:%P%@ipv4.tunnelbroker.net/ipv4_end.php?ip=%4%&tid=%T%&update=Submit"
-URL="https://%N%:%O%@ipv4.tunnelbroker.net/ipv4_end.php?ip=%4%&tid=%T%"
-URL="https://%Q%:%O%@ipv4.tunnelbroker.net/ipv4_end.php?ip=%4%&tid=%T%"
-URL="http://ipv4.tunnelbroker.net/ipv4_end.php?ip=%4%&pass=%P%&user_id=%Q%&tid=%T%"
+URL="http://ipv4.tunnelbroker.net/ipv4_end.php?ip=%4%&pass=%K%&user_id=%N%&tid=%T%"
 . /etc/he.conf
 
 LOCIP=$(ifconfig egress | awk '$1 ~ /^inet$/{print $2}')
 URL=$(echo "$URL" | sed \
-	-e "s/%P%/${MD5PASS}/g" \
-	-e "s/%U%/${MD5USER}/g" \
-	-e "s/%N%/${USERID}/g" \
-	-e "s/%Q%/${USERNAME}/g" \
-	-e "s/%O%/${PASSWORD}/g" \
 	-e "s/%4%/${LOCIP}/g" \
-	-e "s/%T%/${GTUNID}/g")
-echo "URL=$URL"
+	-e "s/%K%/${TUNKEY}/g" \
+	-e "s/%N%/${USERID}/g" \
+	-e "s/%T%/${GTUNID}/g"
+)
 
 if ! ftp -o /var/log/ipv4update.log "$URL"; then
 	echo "Failed to update he.net IPv6 tunnel"
